@@ -1,6 +1,7 @@
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 const int PROC_ONE = 0;
 const int PROC_TWO = 1;
@@ -28,31 +29,6 @@ int main(int argc, char** argv) {
     MPI_Type_vector(ROWS, COLS, COLS, MPI_INT, &matrixType);
     MPI_Type_commit(&matrixType);
 
-    // switch(world_rank)
-    // {
-    //     case SENDER:
-    //     {
-    //         int buffer_sent = 12345;
-    //         MPI_Request request;
-    //         printf("MPI process %d sends value %d.\n", world_rank, buffer_sent);
-    //         MPI_Isend(&buffer_sent, 1, MPI_INT, 1, 0, MPI_COMM_WORLD, &request);
-            
-    //         // Do other things while the MPI_Isend completes
-    //         // <...>
- 
-    //         // Let's wait for the MPI_Isend to complete before progressing further.
-    //         MPI_Wait(&request, MPI_STATUS_IGNORE);
-    //         break;
-    //     }
-    //     case RECEIVER:
-    //     {
-    //         int received;
-    //         MPI_Recv(&received, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    //         printf("MPI process %d received value: %d.\n", world_rank, received);
-    //         break;
-    //     }
-    // }
-
     int matrix[ROWS][COLS];
     int i = 0, k = 4, n = 6;
     switch(world_rank)
@@ -66,12 +42,14 @@ int main(int argc, char** argv) {
                 buffer_size += (MPI_BSEND_OVERHEAD + sizeof(int));
                 i++;
             }
-            char *buffer = malloc(buffer_size);
+            int *buffer = malloc(buffer_size);
             
-            printf("%d\n", buffer_size);
+            printf("buffer size: %d\n", buffer_size);
             printf("Size of an MPI_Bsend overhead: %d bytes.\n", MPI_BSEND_OVERHEAD);
             MPI_Buffer_attach(buffer, buffer_size);
-
+            
+            srand(time(NULL)); // Seed the random number generator with the current time
+            i = 0;
             while(i <= k) {
                 int msg = rand() % 100 + 1;
                 printf("[Process %d] I send value %d to process %d.\n", world_rank, msg, RECEIVER);
@@ -79,37 +57,8 @@ int main(int argc, char** argv) {
                 i++;
             }
 
-            // int msg = rand() % 100 + 1;
-            // printf("[Process %d] I send value %d to process %d.\n", world_rank, msg, RECEIVER);
-            // MPI_Bsend(&msg, 1, MPI_INT, RECEIVER, 0, MPI_COMM_WORLD);
-
             MPI_Buffer_detach(&buffer, &buffer_size);
             free(buffer);
-
-
-            // while(i <= n) {
-            //     int msg = rand() % 100 + 1;
-            //     if(k <= i) {
-            //         int buffer_size = (MPI_BSEND_OVERHEAD + sizeof(int));
-            //         char *buffer = malloc(buffer_size);
-            //         printf("Size of an MPI_Bsend overhead: %d bytes.\n", MPI_BSEND_OVERHEAD);
-            //         MPI_Buffer_attach(buffer, buffer_size);
-
-            //         printf("[Process %d] I send value %d to process %d.\n", world_rank, msg, RECEIVER);
-            //         MPI_Bsend(&msg, 1, MPI_INT, RECEIVER, 0, MPI_COMM_WORLD);
-                    
-            //         MPI_Buffer_detach(&buffer, &buffer_size);
-            //         free(buffer);
-            //     }
-                // else {
-                //     MPI_Request request;
-                //     printf("MPI process %d sends value %d.\n", world_rank, msg);
-                //     MPI_Isend(&msg, 1, MPI_INT, 1, 0, MPI_COMM_WORLD, &request);
-                //     MPI_Status myStatus;
-                //     MPI_Wait(&request, &myStatus);
-                // }
-                // i++;
-            // }
 
             break;
         }
@@ -117,10 +66,11 @@ int main(int argc, char** argv) {
         {
             int buffer;
             MPI_Request request;
+            i = 0;
             while(i <= k) {
-                printf("MPI process %d received value: %d.\n", world_rank, buffer);
                 MPI_Irecv(&buffer, 1, MPI_INT, SENDER, 0, MPI_COMM_WORLD, &request);
                 MPI_Wait(&request, MPI_STATUS_IGNORE);
+                printf("MPI process %d received value: %d.\n", world_rank, buffer);
                 i++;
             } 
         }
