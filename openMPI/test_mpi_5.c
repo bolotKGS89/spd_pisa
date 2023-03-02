@@ -32,7 +32,7 @@ void emitter(int num_workers) {
     int next_worker = 1;
     TaskData task;
     double start_time = MPI_Wtime();
-    double timeout_seconds = 5.0; // set timeout to 10 seconds
+    double timeout_seconds = 5.0; // set timeout to 5 seconds
 
      /* generate and send tasks to workers */
     srand(time(NULL)); // Seed the random number generator with the current time
@@ -63,7 +63,25 @@ void emitter(int num_workers) {
     //     next_worker = (next_worker % num_workers) + 1;
     // } /* explicit task request */
 
-    while(1) {
+    // while(1) {
+    //      /* generate a new task */
+    //      /* fill in the task data structure */
+    //     task.x = rand() % 100 + 1;
+    //     task.y = rand() % 100 + 1;
+
+    //     printf("[Process Emitter] I send value %d %d to process %d.\n", task.x, task.y, next_worker);
+    //     MPI_Send(&task, sizeof(TaskData), MPI_BYTE, next_worker, TAG_JOB, MPI_COMM_WORLD);
+
+    //     // check if timeout has expired
+    //     if (MPI_Wtime() - start_time > timeout_seconds) {
+    //         printf("Timeout expired, terminating loop.\n");
+    //         break;
+    //     }
+
+    //     next_worker = (next_worker % num_workers) + 1;
+    // } /* round-robin */
+
+     while(next_worker < num_workers) {
          /* generate a new task */
          /* fill in the task data structure */
         task.x = rand() % 100 + 1;
@@ -72,14 +90,10 @@ void emitter(int num_workers) {
         printf("[Process Emitter] I send value %d %d to process %d.\n", task.x, task.y, next_worker);
         MPI_Send(&task, sizeof(TaskData), MPI_BYTE, next_worker, TAG_JOB, MPI_COMM_WORLD);
 
-        // check if timeout has expired
-        if (MPI_Wtime() - start_time > timeout_seconds) {
-            printf("Timeout expired, terminating loop.\n");
-            break;
-        }
+        // next_worker = (next_worker % num_workers) + 1;
+        next_worker++;
+    }
 
-        next_worker = (next_worker % num_workers) + 1;
-    } /* round-robin */
 
     for (int i = 1; i < num_workers; i++) {
         MPI_Send(NULL, 0, MPI_BYTE, i, TAG_END_STREAM, MPI_COMM_WORLD);
@@ -95,8 +109,26 @@ void worker(int rank) {
     ResultData result;
 
     /* receive and process tasks from emitter */
-    while (1) { 
+    MPI_Recv(&task, sizeof(TaskData), MPI_BYTE, EMITTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 
+    int i = 0, k = 4;
+    int buffer_size = 0;
+    while(i <= k) {
+        buffer_size += (MPI_BSEND_OVERHEAD + sizeof(int));
+        i++;
+    }
+    int *buffer = malloc(buffer_size);
+    
+    // printf("buffer size: %d\n", buffer_size);
+    // printf("Size of an MPI_Bsend overhead: %d bytes.\n", MPI_BSEND_OVERHEAD);
+    MPI_Buffer_attach(buffer, buffer_size);
+
+    i = 0;
+    while(i <= k) {
+        compute(&task, &result);
+        printf("[Process Worker %d] I received and computed value %.2f %.2f from process %d with degree %d.\n", rank, result.x, result.y, EMITTER, i);
+        MPI_Bsend(&result, sizeof(ResultData), MPI_BYTE, COLLECTOR, TAG_JOB, MPI_COMM_WORLD);
+        i++;
     }
 
     //  while (1) {
@@ -136,19 +168,28 @@ void collector(int num_workers) {
     MPI_Request request;
     int next_worker = 1;
 
-     while(1) {
-        MPI_Irecv(&result, sizeof(ResultData), MPI_BYTE, next_worker, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
+    for(int i = 1; i < num_workers; i++) {
+        MPI_Irecv(&result, sizeof(ResultData), MPI_BYTE, i, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
         MPI_Wait(&request, &status);
 
-        if (status.MPI_TAG == TAG_END_STREAM) {
-            printf("end collector\n");
-            break;
-        }
+        printf("[Process Collecter %d] I received value %.2f %.2f from process %d.\n", COLLECTOR, result.x, result.y, i);
+    }
 
-        printf("[Process Collecter %d] I received value %.2f %.2f from process %d.\n", COLLECTOR, result.x, result.y, next_worker);
 
-        next_worker = (next_worker % (num_workers - 1)) + 1;
-    } /* explicit task request */
+
+    //  while(1) {
+    //     MPI_Irecv(&result, sizeof(ResultData), MPI_BYTE, next_worker, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
+    //     MPI_Wait(&request, &status);
+
+    //     if (status.MPI_TAG == TAG_END_STREAM) {
+    //         printf("end collector\n");
+    //         break;
+    //     }
+
+    //     printf("[Process Collecter %d] I received value %.2f %.2f from process %d.\n", COLLECTOR, result.x, result.y, next_worker);
+
+    //     next_worker = (next_worker % (num_workers - 1)) + 1;
+    // } /* explicit task request */
 
     // while(1) {    
     //     MPI_Recv(&result, sizeof(ResultData), MPI_BYTE, next_worker, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
@@ -187,7 +228,6 @@ int main(int argc, char** argv) {
             worker(world_rank);
         break;
     }
-
     
     MPI_Finalize();
     
