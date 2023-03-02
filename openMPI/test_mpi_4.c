@@ -52,8 +52,8 @@ int main(int argc, char** argv) {
             i = 0;
             while(i <= k) {
                 int msg = rand() % 100 + 1;
-                printf("[Process %d] I send value %d to process %d.\n", world_rank, msg, RECEIVER);
-                MPI_Bsend(&msg, 1, MPI_INT, RECEIVER, 0, MPI_COMM_WORLD);
+                printf("[Process %d] I send value %d to process %d.\n", world_rank, matrix[ROWS][COLS], RECEIVER);
+                MPI_Bsend(&matrix[i][0], COLS, MPI_INT, RECEIVER, 0, MPI_COMM_WORLD);
                 i++;
             }
 
@@ -68,9 +68,9 @@ int main(int argc, char** argv) {
             MPI_Request request;
             i = 0;
             while(i <= k) {
-                MPI_Irecv(&buffer, 1, MPI_INT, SENDER, 0, MPI_COMM_WORLD, &request);
+                MPI_Irecv(&matrix[i][0], COLS, MPI_INT, SENDER, 0, MPI_COMM_WORLD, &request);
                 MPI_Wait(&request, MPI_STATUS_IGNORE);
-                printf("MPI process %d received value: %d.\n", world_rank, buffer);
+                printf("MPI process %d received value: %d.\n", world_rank, matrix[ROWS][COLS]);
                 i++;
             } 
         }
