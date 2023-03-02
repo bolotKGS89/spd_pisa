@@ -8,9 +8,9 @@ void collector(int size, int *stream);
 void worker(int task_size, int *task_buffer, int *result_buffer);
 
 int main(int argc, char **argv) {
-    int rank, size;
+    int world_rank, size;
     MPI_Init(&argc, &argv);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     // Initialize data structures
@@ -18,11 +18,11 @@ int main(int argc, char **argv) {
     int stream_size = 0;
 
     // Emitter process
-    if (rank == 0) {
+    if (world_rank == 0) {
         emitter(size, stream);
     }
     // Worker processes
-    else if (rank > 0 && rank < size-1) {
+    else if (world_rank > 0 && world_rank < size-1) {
         // Receive tasks and execute them until end of stream is reached
         int task_size;
         MPI_Status status;
