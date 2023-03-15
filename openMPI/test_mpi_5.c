@@ -2,58 +2,13 @@
 #include <stdlib.h>
 #include <mpi.h>
 #include <time.h>
+#include "mandelbrot.h"
 
 #define TAG_JOB 1
 #define TAG_RESULT 2
 #define EMITTER 0
 #define COLLECTOR 9
 #define TAG_END_STREAM 3
-
-int GiveEscapeTime(double C_x, double C_y, int iMax, double _ER2);
-
-typedef struct {
-    double C_x;
-    double C_y;
-    int iMax;
-    double _ER2;
-} TaskData;
-
-typedef struct {
-    double C_x;
-    double C_y;
-    int iMax;
-    double _ER2;
-    int res;
-} ResultData;
-
-/* define your computing function here */
-void compute(TaskData *task, ResultData *result) {
-    /* implement your computation logic here */
-    result->C_x = task->C_x;
-    result->C_y = task->C_y;
-    result->iMax = task->iMax;
-    result->_ER2 = task->_ER2;
-    result->res = GiveEscapeTime(task->C_x, task->C_y, task->iMax, task->_ER2);
-}
-
-int GiveEscapeTime(double C_x, double C_y, int iMax, double _ER2)
-{
-    int i;
-    double Zx, Zy;
-    double Zx2, Zy2; /* Zx2=Zx*Zx; Zy2=Zy*Zy */
-    Zx=0.0; /* initial value of orbit = critical point
-    Z= 0 */
-    Zy=0.0;
-    Zx2=Zx*Zx;
-    Zy2=Zy*Zy;
-    for (i=0;i<iMax && ((Zx2+Zy2)<_ER2);i++) { 
-        Zy = 2*Zx*Zy + C_y;
-        Zx = Zx2-Zy2 +C_x;
-        Zx2 = Zx*Zx;
-        Zy2 = Zy*Zy;
-    };
-    return i;
-}
 
 /* define your emitter process */
 void emitter(int num_workers) {
@@ -236,7 +191,6 @@ void collector(int num_workers) {
     } /* round-robin */
     
 }
-
 
 
 int main(int argc, char** argv) {
