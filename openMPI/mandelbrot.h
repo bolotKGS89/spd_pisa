@@ -18,6 +18,8 @@ typedef struct {
 
 void compute(TaskData *task, ResultData *result);
 
+TaskData assignRandomData();
+
 int GiveEscapeTime(double C_x, double C_y, int iMax, double _ER2);
 
 #endif

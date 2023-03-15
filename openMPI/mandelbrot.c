@@ -1,4 +1,5 @@
 #include "mandelbrot.h"
+#include <stdlib.h>
 
 void compute(TaskData *task, ResultData *result) {
     result->C_x = task->C_x;
@@ -8,6 +9,14 @@ void compute(TaskData *task, ResultData *result) {
     result->res = GiveEscapeTime(task->C_x, task->C_y, task->iMax, task->_ER2);
 }
 
+TaskData assignRandomData() {
+    TaskData task;
+    task.C_x = (rand() / (double)RAND_MAX) * 4 - 2;
+    task.C_y = (rand() / (double)RAND_MAX) * 4 - 2;
+    task.iMax = rand() % 991 + 10;
+    task._ER2 = (rand() / (double)RAND_MAX) * 9 + 1;
+    return task;
+}
 
 int GiveEscapeTime(double C_x, double C_y, int iMax, double _ER2)
 {

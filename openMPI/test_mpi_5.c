@@ -48,13 +48,7 @@ void emitter(int num_workers) {
     // } /* explicit task request */
 
     while(1) {
-         /* generate a new task */
-         /* fill in the task data structure */
-        task.C_x = (rand() / (double)RAND_MAX) * 4 - 2;
-        task.C_y = (rand() / (double)RAND_MAX) * 4 - 2;
-        task.iMax = rand() % 991 + 10;
-        task._ER2 = (rand() / (double)RAND_MAX) * 9 + 1;
-
+        task = assignRandomData();
         printf("[Process Emitter] I send value C_x %.2f  C_y %.2f iMax %d ER2 %.2f to process %d.\n", task.C_x, task.C_y, task.iMax, task._ER2, next_worker);
         MPI_Send(&task, sizeof(TaskData), MPI_BYTE, next_worker, TAG_JOB, MPI_COMM_WORLD);
 
