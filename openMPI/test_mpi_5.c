@@ -65,7 +65,7 @@ void worker(int rank, DistributionPolicy distributionPolicy) {
     ResultData result;
 
     if (distributionPolicy == ROUND_ROBIN) {
-        while (true) {
+        while (1) {
             MPI_Recv(&task, sizeof(TaskData), MPI_BYTE, EMITTER, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 
             if (status.MPI_TAG == TAG_END_STREAM) {
@@ -74,12 +74,9 @@ void worker(int rank, DistributionPolicy distributionPolicy) {
                 break;
             } 
             compute(&task, &result);
-            // printf("[Process Worker %d] I received and computed value C_x %.2f C_y %.2f iMax %d ER2 %.2f result %d from process %d.\n",
-            // rank, result.C_x, result.C_y, result.iMax, result._ER2, result.res, EMITTER);
+        
                     
             MPI_Rsend(&result, sizeof(ResultData), MPI_BYTE, COLLECTOR, TAG_JOB, MPI_COMM_WORLD);
-            
-
         } /* round-robin */
     } else if (distributionPolicy == EXPLICIT_REQUEST) {
         while (1) {
@@ -93,15 +90,13 @@ void worker(int rank, DistributionPolicy distributionPolicy) {
             }
 
             compute(&task, &result);
-            // printf("[Process Worker %d] I received and computed value C_x %.2f C_y %.2f iMax %d ER2 %.2f result %d from process %d.\n",
-            //  rank, result.C_x, result.C_y, result.iMax, result._ER2, result.res, EMITTER);
 
             MPI_Isend(&result, sizeof(ResultData), MPI_BYTE, COLLECTOR, TAG_JOB, MPI_COMM_WORLD, &request);
             MPI_Wait(&request, &status);
         } /* explicit task request */
 
     } else if (distributionPolicy == BUFFER) {
-        MPI_Recv(&task, sizeof(TaskData), MPI_INT, EMITTER, TAG_JOB, MPI_COMM_WORLD, &status);
+        MPI_Recv(&task, sizeof(TaskData), MPI_BYTE, EMITTER, TAG_JOB, MPI_COMM_WORLD, &status);
         int i = 0, k = 4;
         int buffer_size = 0;
         while(i <= k) {
@@ -117,13 +112,14 @@ void worker(int rank, DistributionPolicy distributionPolicy) {
         i = 0;
         while(i <= k) {
             compute(&task, &result);
-            printf("[Process Worker %d] I received and computed value C_x %.2f C_y %.2f iMax %d ER2 %.2f result %d from process %d.\n",
-             rank, result.C_x, result.C_y, result.iMax, result._ER2, result.res, EMITTER);
             MPI_Bsend(&result, sizeof(ResultData), MPI_BYTE, COLLECTOR, TAG_JOB, MPI_COMM_WORLD);
             i++;
         } /* buffer */
 
     }
+
+    printf("[Process Worker %d] I received and computed value C_x %.2f C_y %.2f iMax %d ER2 %.2f result %d from process %d.\n",
+        rank, result.C_x, result.C_y, result.iMax, result._ER2, result.res, EMITTER);
 }
 
 /* define your collector process */
@@ -142,8 +138,6 @@ void collector(int num_workers, DistributionPolicy distributionPolicy) {
                 printf("end collector\n");
                 break;
             }
-            // printf("[Process Collecter %d] I received value %.2f %.2f %d %.2f %d from process %d.\n", COLLECTOR, 
-            // result.C_x, result.C_y, result.iMax, result._ER2, result.res, next_worker);
             next_worker = (next_worker % (num_workers - 1)) + 1;
         } /* round-robin */
     } else if (distributionPolicy == EXPLICIT_REQUEST) {
@@ -155,21 +149,19 @@ void collector(int num_workers, DistributionPolicy distributionPolicy) {
                 printf("end collector\n");
                 break;
             }
-
-            // printf("[Process Collecter %d] I received value %.2f %.2f %d %.2f %d from process %d.\n", COLLECTOR, 
-            // result.C_x, result.C_y, result.iMax, result._ER2, result.res, next_worker);
-
             next_worker = (next_worker % (num_workers - 1)) + 1;
         } /* explicit task request */
     } else if (distributionPolicy == BUFFER) { 
-
         for(int i = 1; i < num_workers; i++) {
             MPI_Irecv(&result, sizeof(ResultData), MPI_BYTE, i, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
             MPI_Wait(&request, &status);
 
-            printf("[Process Collecter %d] I received value %.2f %.2f from process %d.\n", COLLECTOR, result.x, result.y, i);
+
         } /* buffer */
-    }    
+    }  
+
+    printf("[Process Collecter %d] I received value %.2f %.2f %d %.2f %d from process %d.\n", COLLECTOR, 
+    result.C_x, result.C_y, result.iMax, result._ER2, result.res, next_worker);  
 }
 
 
@@ -191,13 +183,13 @@ int main(int argc, char** argv) {
     switch (world_rank)
     {
         case EMITTER:
-            emitter(8, ROUND_ROBIN);
+            emitter(8, BUFFER);
         break;
         case COLLECTOR:
-            collector(COLLECTOR, ROUND_ROBIN);
+            collector(COLLECTOR, BUFFER);
         break;
         default:
-            worker(world_rank, ROUND_ROBIN);
+            worker(world_rank, BUFFER);
         break;
     }
     
