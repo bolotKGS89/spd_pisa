@@ -1,5 +1,6 @@
 #include "mandelbrot.h"
 #include <stdlib.h>
+#include <time.h>
 
 void compute(TaskData *task, ResultData *result) {
     result->C_x = task->C_x;
@@ -10,6 +11,8 @@ void compute(TaskData *task, ResultData *result) {
 }
 
 TaskData assignRandomData() {
+    srand(time(NULL)); // Seed the random number generator with the current time
+
     TaskData task;
     task.C_x = (rand() / (double)RAND_MAX) * 4 - 2;
     task.C_y = (rand() / (double)RAND_MAX) * 4 - 2;
@@ -22,9 +25,8 @@ int GiveEscapeTime(double C_x, double C_y, int iMax, double _ER2)
 {
     int i;
     double Zx, Zy;
-    double Zx2, Zy2; /* Zx2=Zx*Zx; Zy2=Zy*Zy */
-    Zx=0.0; /* initial value of orbit = critical point
-    Z= 0 */
+    double Zx2, Zy2;
+    Zx=0.0; 
     Zy=0.0;
     Zx2=Zx*Zx;
     Zy2=Zy*Zy;
