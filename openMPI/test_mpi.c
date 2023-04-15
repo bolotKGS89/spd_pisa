@@ -46,17 +46,17 @@ int main(int argc, char** argv) {
         int row, column;
         int matrix[ROWS][COLS];
 
-        int i = 0, n = 3;
+        int i = 0;
 
         int token = 0;
-         switch(world_rank) {
+        switch(world_rank) {
             case SENDER:
                 initializeMatrix(matrix, ROWS, COLS);
                 while(i <= world_size) {
                     if(token == SENDER) {
-                        MPI_Send(matrix, 1, colType, (world_rank+1)%world_size, 1, MPI_COMM_WORLD);
+                        MPI_Send(matrix, 1, matrixType, (world_rank+1)%world_size, 1, MPI_COMM_WORLD);
                         MPI_Status status;
-                        MPI_Recv(matrix, 1, colType, (world_rank-1+world_size)%world_size, 1, MPI_COMM_WORLD, &status);
+                        MPI_Recv(matrix, 1, matrixType, (world_rank-1+world_size)%world_size, 1, MPI_COMM_WORLD, &status);
                         printf("recv matrix last element of column: %d process rank %d\n", 
                                 matrix[ROWS-1][0], world_rank);
                         i++;
@@ -69,9 +69,9 @@ int main(int argc, char** argv) {
                 while(i <= world_size) {
                     if(token == world_rank) {
                         MPI_Status status;
-                        MPI_Recv(matrix, 1, colType, (world_rank-1+world_size)%world_size, 1, MPI_COMM_WORLD, &status);
+                        MPI_Recv(matrix, 1, matrixType, (world_rank-1+world_size)%world_size, 1, MPI_COMM_WORLD, &status);
                         increaseByOne(matrix, ROWS, COLS);
-                        MPI_Send(matrix, 1, colType, (world_rank+1)%world_size, 1, MPI_COMM_WORLD);
+                        MPI_Send(matrix, 1, matrixType, (world_rank+1)%world_size, 1, MPI_COMM_WORLD);
                         printf("send matrix last element of column: %d process rank %d\n", 
                                 matrix[ROWS-1][0], world_rank);
                         i++;
@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
         // {
         //    case SENDER:
         //         initializeMatrix(matrix, ROWS, COLS);
-        //         while(i <= n) {
+        //         while(i <= 3) {
         //              // process 1
         //              MPI_Send(matrix, 1, colType, RECEIVER, 1, MPI_COMM_WORLD);
         //              MPI_Status status;
@@ -97,7 +97,7 @@ int main(int argc, char** argv) {
         //    break;
         //    case RECEIVER:
         //         initializeMatrixByZero(matrix, ROWS, COLS);
-        //         while(i <= n) {
+        //         while(i <= 3) {
         //              MPI_Status status;
         //              MPI_Recv(matrix, 1, colType, SENDER, 1, MPI_COMM_WORLD, &status);
         //              increaseByOne(matrix, ROWS, COLS);

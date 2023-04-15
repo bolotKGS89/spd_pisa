@@ -2,39 +2,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-const int PROC_ONE = 0;
-const int PROC_TWO = 1;
-const int ROWS = 10;
-const int COLS = 10;
+#define SENDER 0
+#define RECEIVER 1
+#define ROWS 10
+#define COLS 10
 
-void initializeMatrix(int matrix[ROWS][0], int col);
-void increaseByOne(int matrix[ROWS][0], int col);
+void initializeMatrix(int matrix[ROWS][COLS], int row, int col);
+void increaseByOne(int matrix[ROWS][COLS], int row, int col);
+void initializeMatrixByZero(int matrix[ROWS][COLS], int row, int col);
 
 int main(int argc, char** argv) {
 
-    MPI_Init(NULL, NULL);      // initialize MPI environment
+    MPI_Init(&argc, &argv);      // initialize MPI environment
+    
     int world_size; // number of processes
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
     int world_rank; // the rank of the process
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
-    if(world_size != 2)
-    {
-        printf("This application is meant to be run with 2 processes.\n");
-        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-    }
-
+    MPI_Datatype matrixType;
+    MPI_Type_vector(ROWS, COLS, COLS, MPI_INT, &matrixType);
+    MPI_Type_commit(&matrixType);
 
     MPI_Datatype colType;
     MPI_Type_vector(ROWS, 1, COLS, MPI_INT, &colType);
     MPI_Type_commit(&colType);
 
-    int num_cols = 10; // number of columns in the matrix
-    int row_len = num_cols * sizeof(double); // length of a row in bytes
-
     MPI_Datatype row_type;
-    MPI_Type_vector(1, num_cols, 1, MPI_INT, &row_type);
+    MPI_Type_vector(1, ROWS, 1, MPI_INT, &row_type);
     MPI_Type_commit(&row_type);
 
     int n = 6; // matrix size
@@ -45,58 +41,74 @@ int main(int argc, char** argv) {
     MPI_Type_vector(n, blocksize, stride, MPI_INT, &column_type);
     MPI_Type_commit(&column_type);
 
-    int n = 6;
     MPI_Datatype up_diag_type;    
     MPI_Type_vector(n, 1, n+1, MPI_DOUBLE, &up_diag_type);
     MPI_Type_commit(&up_diag_type);
 
-    int n = 6;
     MPI_Datatype down_diag_type;   
     MPI_Type_vector(n, 1, n-1, MPI_DOUBLE, &down_diag_type);
     MPI_Type_commit(&down_diag_type);
 
-    int i = 0, n = 3;
-    int matrix[ROWS][0];
+    int i = 0;
+    int matrix[ROWS][COLS];
 
-    if(world_rank == 0) {
-        initializeMatrix(matrix, COLS);
-        while(i <= n) {
-            // process 1
-            // int MPI_Send(const void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm)
-            MPI_Send(matrix, 1, colType, PROC_TWO, 1, MPI_COMM_WORLD);
-            // int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm, MPI_Status *status)
-            MPI_Status status;
-            MPI_Recv(matrix, 1, colType, PROC_TWO, 1, MPI_COMM_WORLD, &status);
-            printf("recv matrix last element: %d process rank %d\n", matrix[0][COLS-1], world_rank);
-            i++;
-        }        
-    } else if(world_rank == 1) {
-        while(i <= n) {
-            // process 2
-            MPI_Status status;
-            MPI_Recv(matrix, 1, colType, PROC_ONE, 1, MPI_COMM_WORLD, &status);
-            increaseByOne(matrix, COLS);
-            MPI_Send(matrix, 1, colType, PROC_ONE, 1, MPI_COMM_WORLD);
-            printf("send matrix last element: %d process rank %d\n", matrix[0][COLS-1], world_rank);           
-            i++;     
-        }        
+    int token = 0;
+    switch(world_rank) {
+        case SENDER:
+            initializeMatrix(matrix, ROWS, COLS);
+            while(i <= world_size) {
+                if(token == SENDER) {
+                    MPI_Send(matrix, 1, column_type, (world_rank+1)%world_size, 1, MPI_COMM_WORLD);
+                    MPI_Status status;
+                    MPI_Recv(matrix, 1, column_type, (world_rank-1+world_size)%world_size, 1, MPI_COMM_WORLD, &status);
+                    printf("recv matrix last element of column: %d process rank %d\n", 
+                            matrix[ROWS-1][0], world_rank);
+                    i++;
+                }
+                token = (token+1) % world_size;
+            }        
+            break;
+        case RECEIVER:
+            // initializeMatrixByZero(matrix, ROWS, COLS);
+            while(i <= world_size) {
+                if(token == world_rank) {
+                    MPI_Status status;
+                    MPI_Recv(matrix, 1, column_type, (world_rank-1+world_size)%world_size, 1, MPI_COMM_WORLD, &status);
+                    increaseByOne(matrix, ROWS, COLS);
+                    MPI_Send(matrix, 1, column_type, (world_rank+1)%world_size, 1, MPI_COMM_WORLD);
+                    printf("send matrix last element of column: %d process rank %d\n", 
+                            matrix[ROWS-1][0], world_rank);
+                    i++;
+                }
+                token = (token+1) % world_size;
+            }
+            break;
     }
-
-    
-
 
     MPI_Finalize(); // finish MPI environment
 }
 
-void initializeMatrix(int matrix[ROWS][0], int col) {
-    for(int j = 0; j < col; j++) {
-            matrix[j][0] = 0 + (j * 10);
-    }
+void initializeMatrixByZero(int matrix[ROWS][COLS], int row, int col) {
+        for(int i = 0; i < row; i++) {
+                for(int j = 0; j < col; j++) {
+                        matrix[i][j] = 0;
+                }
+        }
 }
 
-void increaseByOne(int matrix[ROWS][0], int col) {
-    for(int j = 0; j < col; j++) {
-            matrix[j][0] *= 2;
-    }
+
+void initializeMatrix(int matrix[ROWS][COLS], int row, int col) {
+        for(int i = 0; i < row; i++) {
+                for(int j = 0; j < col; j++) {
+                        matrix[i][j] = i + (j * 10);
+                }
+        }
 }
-        
+
+void increaseByOne(int matrix[ROWS][COLS], int row, int col) {
+        for(int i = 0; i < row; i++) {
+                for(int j = 0; j < col; j++) {
+                        matrix[i][j] *= 2;
+                }
+        }
+}
