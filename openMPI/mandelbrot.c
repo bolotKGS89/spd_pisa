@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <time.h>
 
+
+int num_received = 0;
+TaskData tasks[10];
+
 void compute(TaskData *task, ResultData *result) {
     result->C_x = task->C_x;
     result->C_y = task->C_y;
