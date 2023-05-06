@@ -13,7 +13,7 @@
 #define EMITTER 0
 #define COLLECTOR 9
 #define WORKERS_NUM 10
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 2048
 
 /* define your emitter process */
 void emitter(int num_workers, DistributionPolicy distributionPolicy, MPI_Request request) {
@@ -66,16 +66,33 @@ void emitter(int num_workers, DistributionPolicy distributionPolicy, MPI_Request
         int num_sent = 0;
         TaskData data;
 
-         for (size_t i = 0; i < WORKERS_NUM - 2; i++) {
-                      
+        char* buffer = (char*)malloc(BUFFER_SIZE);
+        MPI_Buffer_attach(buffer, BUFFER_SIZE);
+        int buffer_size = BUFFER_SIZE;
+
+        while (num_sent < num_workers) {
             data = assignRandomData();
-            MPI_Isend(&data, sizeof(TaskData), MPI_BYTE, i, TAG_JOB, MPI_COMM_WORLD, &request);
-            MPI_Wait(&request, &status);
+           
+            // Send the task data to the worker processes
+            MPI_Bsend(&data, sizeof(TaskData), MPI_BYTE, num_sent, TAG_JOB, MPI_COMM_WORLD);
+            num_sent++;
         }
+        // num_sent = 0;
+
+        // while (num_sent < num_workers) {
+        //      printf("[Process Emitter %d] sent to %d with status %d\n", EMITTER, num_sent, TAG_END_STREAM);
+        //     // Send null to the worker processes
+        //     MPI_Bsend(&data, sizeof(TaskData), MPI_BYTE, num_sent, TAG_END_STREAM, MPI_COMM_WORLD);
+        //     num_sent++;
+        // }
+
+        // Detach the buffer from the communicator
+        MPI_Buffer_detach(&buffer, &buffer_size);
     }
 
 
-    for (int i = 1; i < WORKERS_NUM - 1; i++) {
+    for (int i = 1; i < WORKERS_NUM - 2; i++) {
+        printf("done");
         MPI_Isend(NULL, 0, MPI_BYTE, i, TAG_END_STREAM, MPI_COMM_WORLD, &request);
         MPI_Wait(&request, &status);
     }
@@ -119,7 +136,7 @@ void worker(int rank, DistributionPolicy distributionPolicy, MPI_Request request
                     MPI_Isend(&task, sizeof(TaskData), MPI_BYTE, COLLECTOR, TAG_JOB, MPI_COMM_WORLD, &request);
                     MPI_Wait(&request, &status);               
                 } else if(status.MPI_TAG == TAG_END_STREAM) {
-                    // printf("[Process Worker %d] received from %d with status %d a value %d\n", rank, EMITTER, status.MPI_TAG, result.iMax);
+                    // printf("[Process Worker %d] received from %d with status %d a value %d\n", rank, EMITTER, status.MPI_TAG);
                     MPI_Isend(NULL, 0, MPI_BYTE, COLLECTOR, TAG_END_STREAM, MPI_COMM_WORLD, &request);
                     MPI_Wait(&request, &status);
                     break;
@@ -134,7 +151,7 @@ void worker(int rank, DistributionPolicy distributionPolicy, MPI_Request request
 
         while (1) {
             // Receive the task data from the emitter or collector process
-            MPI_Irecv(&task, sizeof(TaskData), MPI_BYTE, EMITTER, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
+            MPI_Irecv(&task, buffer_size, MPI_BYTE, EMITTER, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
             MPI_Wait(&request, &status);
 
             int tag = status.MPI_TAG;
@@ -142,13 +159,14 @@ void worker(int rank, DistributionPolicy distributionPolicy, MPI_Request request
             if (tag == TAG_JOB) {
                 // Process the task
                 compute(&task, &result);
-                // printf("[Process Worker %d] received from %d with status %d a value %d\n", rank, EMITTER, status.MPI_TAG, result.iMax);
-
+                
                 // Send the result back to the collector process
                 MPI_Bsend(&result, sizeof(ResultData), MPI_BYTE, COLLECTOR, TAG_RESULT, MPI_COMM_WORLD);
             }
             else if (tag == TAG_END_STREAM) {
-                break;
+                // printf("[Process Worker %d] received from %d with status %d a value %d\n", rank, EMITTER, status.MPI_TAG, result.iMax);
+                MPI_Bsend(NULL, 0, MPI_BYTE, COLLECTOR, TAG_END_STREAM, MPI_COMM_WORLD);
+            }
         }
 
 
@@ -156,7 +174,7 @@ void worker(int rank, DistributionPolicy distributionPolicy, MPI_Request request
     
     }
 
-    }
+    
 
     // printf("[Process Worker %d] I received and computed value C_x %.2f C_y %.2f iMax %d ER2 %.2f result %d from process %d.\n",
     //     rank, result.C_x, result.C_y, result.iMax, result._ER2, result.res, EMITTER);
@@ -170,7 +188,6 @@ void collector(int num_workers, DistributionPolicy distributionPolicy, MPI_Reque
     // MPI_Request request;
     int next_worker = 1;
 
-
     if (distributionPolicy == ROUND_ROBIN) { 
         while(1) {    
             MPI_Recv(&result, sizeof(ResultData), MPI_BYTE, next_worker, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
@@ -181,42 +198,39 @@ void collector(int num_workers, DistributionPolicy distributionPolicy, MPI_Reque
             next_worker = (next_worker % (num_workers - 1)) + 1;
         } /* round-robin */
     } else if (distributionPolicy == EXPLICIT_REQUEST) {
-        // int num_received = 0;
-        while(true) {
-            MPI_Irecv(&result, sizeof(ResultData), MPI_BYTE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
-            MPI_Wait(&request, &status);
+        MPI_Irecv(&result, sizeof(ResultData), MPI_BYTE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
+        MPI_Wait(&request, &status);
 
-            if (status.MPI_TAG == TAG_END_STREAM) {
-                printf("end collector\n");
-                break;
-            }
-        } /* explicit task request */
+        if (status.MPI_TAG == TAG_END_STREAM) {
+            printf("end collector\n");
+            // break;
+        }
     } else if (distributionPolicy == BUFFER) { 
-        // int num_received = 0;
-        // // Attach a buffer to the communicator
-        // char* buffer = (char*)malloc(sizeof(ResultData));
-        // MPI_Buffer_attach(buffer, sizeof(ResultData));
+        int num_received = 0;
+        // Attach a buffer to the communicator
+        char* buffer = (char*)malloc(BUFFER_SIZE);
+        MPI_Buffer_attach(buffer, BUFFER_SIZE);
+        int buffer_size = BUFFER_SIZE;
 
         while (true) {
             // Receive the result from a worker process
            
-            MPI_Irecv(&result, sizeof(ResultData), MPI_BYTE, MPI_ANY_SOURCE, TAG_RESULT, MPI_COMM_WORLD, &request);
+            MPI_Irecv(&result, buffer_size, MPI_BYTE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
             MPI_Wait(&request, &status);
 
             // Check end-of-stream condition
             int source = status.MPI_SOURCE;
             int tag = status.MPI_TAG;
 
-            printf("[Process Collector %d] received from %d with status %d a value %d\n", COLLECTOR, status.MPI_SOURCE, status.MPI_TAG, result.iMax);
-
             if (tag == TAG_END_STREAM) {
-                printf("end collector\n");
+                // printf("end collector\n");
+                printf("[Process Collector %d] received from %d with status %d a value %d\n", COLLECTOR, status.MPI_SOURCE, status.MPI_TAG, result.iMax);
                 break;
             }
         }
 
         // Detach the buffer from the communicator
-        // MPI_Buffer_detach(&buffer, &size);
+        MPI_Buffer_detach(&buffer, &buffer_size);
     }     
 
     // printf("[Process Collecter %d] I received value %.2f %.2f %d %.2f %d from process %d.\n", COLLECTOR, 
