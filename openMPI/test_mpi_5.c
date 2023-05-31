@@ -36,9 +36,7 @@ void emitter(int num_workers, DistributionPolicy distributionPolicy, MPI_Request
 
             MPI_Ssend(&task, sizeof(TaskData), MPI_BYTE, next_worker, TAG_JOB, MPI_COMM_WORLD);
             next_worker = (next_worker % num_workers) + 1;
-        }
-
-        
+        } 
     } else if (distributionPolicy == EXPLICIT_REQUEST) {
         MPI_Status status;
         int num_sent_req = 0;
@@ -123,9 +121,9 @@ void worker(int rank, DistributionPolicy distributionPolicy, MPI_Request request
         int num_sent = 0;
         while (true) {
             int sendRes = MPI_Isend(NULL, 0, MPI_C_BOOL, EMITTER, TAG_REQUEST, MPI_COMM_WORLD, &request);
+            MPI_Wait(&request, &status);
             if(sendRes == MPI_SUCCESS) {
-                MPI_Wait(&request, &status);
-
+                
                 MPI_Irecv(&task, sizeof(TaskData), MPI_BYTE, EMITTER, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
                 MPI_Wait(&request, &status);
 
@@ -185,25 +183,28 @@ void collector(int num_workers, DistributionPolicy distributionPolicy, MPI_Reque
     MPI_Status status;
     TaskData task;
     ResultData result;
-    // MPI_Request request;
-    int next_worker = 1;
 
     if (distributionPolicy == ROUND_ROBIN) { 
-        while(1) {    
+        int next_worker = 1;
+          while(1) {    
             MPI_Recv(&result, sizeof(ResultData), MPI_BYTE, next_worker, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
             if (status.MPI_TAG == TAG_END_STREAM) {
                 printf("end collector\n");
+                
                 break;
             }
             next_worker = (next_worker % (num_workers - 1)) + 1;
         } /* round-robin */
     } else if (distributionPolicy == EXPLICIT_REQUEST) {
-        MPI_Irecv(&result, sizeof(ResultData), MPI_BYTE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
-        MPI_Wait(&request, &status);
-
-        if (status.MPI_TAG == TAG_END_STREAM) {
-            printf("end collector\n");
-            // break;
+        while (true) {
+            MPI_Irecv(&result, sizeof(ResultData), MPI_BYTE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &request);
+            MPI_Wait(&request, &status);
+            
+            if (status.MPI_TAG == TAG_END_STREAM) {
+                printf("end collector\n");
+                printf("[Process Collector %d] received from %d with status %d a value %d\n", COLLECTOR, status.MPI_SOURCE, status.MPI_TAG, result.iMax);
+                break;
+            }
         }
     } else if (distributionPolicy == BUFFER) { 
         int num_received = 0;
@@ -244,22 +245,23 @@ int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &num_workers);
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-    MPI_Request request;
+
+   MPI_Request request;
 
     switch (world_rank)
     {
         case EMITTER:
-            emitter(8, BUFFER, request);
+            emitter(8, EXPLICIT_REQUEST, request);
         break;
         case COLLECTOR:
-            collector(COLLECTOR, BUFFER, request);
+            collector(COLLECTOR, EXPLICIT_REQUEST, request);
         break;
         default:
-            worker(world_rank, BUFFER, request);
+            worker(world_rank, EXPLICIT_REQUEST, request);
         break;
     }
 
-    MPI_Finalize();
-    
+     MPI_Finalize();
+
     return 0;
 }
